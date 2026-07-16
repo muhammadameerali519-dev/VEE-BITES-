@@ -61,11 +61,50 @@ interface MediaItem {
   url: string;
 }
 
+const safeGetItem = (key: string, defaultValue: string = ''): string => {
+  try {
+    return localStorage.getItem(key) || defaultValue;
+  } catch (e) {
+    console.warn(`localStorage.getItem failed for key ${key}:`, e);
+    try {
+      return sessionStorage.getItem(key) || defaultValue;
+    } catch (se) {
+      return defaultValue;
+    }
+  }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn(`localStorage.setItem failed for key ${key}:`, e);
+    try {
+      sessionStorage.setItem(key, value);
+    } catch (se) {
+      // ignore fallback failure
+    }
+  }
+};
+
+const safeRemoveItem = (key: string): void => {
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.warn(`localStorage.removeItem failed for key ${key}:`, e);
+    try {
+      sessionStorage.removeItem(key);
+    } catch (se) {
+      // ignore fallback failure
+    }
+  }
+};
+
 export default function AdminPortal({ onClose }: { onClose: () => void }) {
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [token, setToken] = useState<string>(localStorage.getItem('veebite_token') || '');
-  const [username, setUsername] = useState<string>(localStorage.getItem('veebite_username') || '');
+  const [token, setToken] = useState<string>(safeGetItem('veebite_token'));
+  const [username, setUsername] = useState<string>(safeGetItem('veebite_username'));
   
   // Login fields
   const [loginUsername, setLoginUsername] = useState('');
@@ -258,19 +297,26 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ username: loginUsername, password: loginPassword })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseErr) {
+        data = { error: `Invalid server response format (HTTP ${response.status}).` };
+        console.error('Failed to parse login response:', responseText);
+      }
 
       if (response.ok) {
-        localStorage.setItem('veebite_token', data.token);
-        localStorage.setItem('veebite_username', data.username);
+        safeSetItem('veebite_token', data.token);
+        safeSetItem('veebite_username', data.username);
         setToken(data.token);
         setUsername(data.username);
-        setIsAuthenticated(true);
         setIsAuthenticated(true);
       } else {
         setLoginError(data.error || 'Failed to authenticate.');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setLoginError('Server connection error. Please try again.');
     } finally {
       setLoginLoading(false);
@@ -284,8 +330,8 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
         headers: { 'Authorization': `Bearer ${token}` }
       });
     } catch (e) {}
-    localStorage.removeItem('veebite_token');
-    localStorage.removeItem('veebite_username');
+    safeRemoveItem('veebite_token');
+    safeRemoveItem('veebite_username');
     setToken('');
     setUsername('');
     setIsAuthenticated(false);
@@ -937,12 +983,12 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                       const revenue = Number(formData.get('revenue') || 0);
                       
                       try {
-                        const token = localStorage.getItem('veebite_admin_token') || sessionStorage.getItem('veebite_admin_token');
+                        const tokenVal = safeGetItem('veebite_token');
                         const res = await fetch('/api/admin/analytics/reset', {
                           method: 'POST',
                           headers: { 
                             'Content-Type': 'application/json',
-                            'Authorization': token ? `Bearer ${token}` : ''
+                            'Authorization': tokenVal ? `Bearer ${tokenVal}` : ''
                           },
                           body: JSON.stringify({ visitorCount, ordersPlaced, revenue })
                         });
@@ -951,7 +997,7 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                           setAnalytics(data.analytics);
                           // Refresh activity logs
                           const logsRes = await fetch('/api/admin/analytics', {
-                            headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+                            headers: { 'Authorization': tokenVal ? `Bearer ${tokenVal}` : '' }
                           });
                           if (logsRes.ok) {
                             const logsData = await logsRes.json();
@@ -1008,12 +1054,12 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                           onClick={async () => {
                             if (!confirm('Are you sure you want to reset everything back to zero (Visits to 566)?')) return;
                             try {
-                              const token = localStorage.getItem('veebite_admin_token') || sessionStorage.getItem('veebite_admin_token');
+                              const tokenVal = safeGetItem('veebite_token');
                               const res = await fetch('/api/admin/analytics/reset', {
                                 method: 'POST',
                                 headers: { 
                                   'Content-Type': 'application/json',
-                                  'Authorization': token ? `Bearer ${token}` : ''
+                                  'Authorization': tokenVal ? `Bearer ${tokenVal}` : ''
                                 },
                                 body: JSON.stringify({ visitorCount: 566, ordersPlaced: 0, revenue: 0 })
                               });
@@ -1022,7 +1068,7 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                                 setAnalytics(data.analytics);
                                 // Refresh activity logs
                                 const logsRes = await fetch('/api/admin/analytics', {
-                                  headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+                                  headers: { 'Authorization': tokenVal ? `Bearer ${tokenVal}` : '' }
                                 });
                                 if (logsRes.ok) {
                                   const logsData = await logsRes.json();
