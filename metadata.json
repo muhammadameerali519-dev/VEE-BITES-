@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: VEE BITE",
+  "description": "Eat Good, Feel Good - Premium Fast Food Restaurant in Gujranwala. Founded by Muhammad Haris, serving high-quality pizzas, burgers, shawarmas, and deals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
