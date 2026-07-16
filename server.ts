@@ -78,6 +78,14 @@ BEHAVIOR GUIDE:
 - If a query is unrelated to VEE BITE, politely steer the conversation back to our delicious menu.
 `;
 
+// Explicit server-side routing/redirect for Admin Portal paths to prevent HTTP 404 errors
+app.get("/admin*", (req, res, next) => {
+  if (req.originalUrl.startsWith("/api/")) {
+    return next();
+  }
+  res.redirect("/#admin");
+});
+
 // AI Assistant chat proxy route
 app.post("/api/chat", async (req, res) => {
   try {
@@ -333,26 +341,6 @@ app.post("/api/orders", (req, res) => {
 
   updateDB(db);
   res.json({ success: true, order: newOrder });
-});
-
-// Track/Fetch an order by orderId
-app.get("/api/orders/:orderId", (req, res) => {
-  const { orderId } = req.params;
-  if (!orderId) {
-    return res.status(400).json({ error: "Order ID is required." });
-  }
-
-  const db = getDB();
-  if (!db.orders) db.orders = [];
-
-  const cleanId = String(orderId).trim().toUpperCase();
-  const order = db.orders.find((o: any) => o.orderId.toUpperCase() === cleanId || o.id === orderId || String(o.id).toUpperCase() === cleanId);
-
-  if (!order) {
-    return res.status(404).json({ error: "Order not found. Please verify the Order ID (e.g., VB-1001)." });
-  }
-
-  res.json(order);
 });
 
 // Record visitor session

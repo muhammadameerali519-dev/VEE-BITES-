@@ -23,8 +23,6 @@ export default function CartDrawer() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderType, setOrderType] = useState<'delivery' | 'pickup'>('delivery');
   const [isPlacing, setIsPlacing] = useState(false);
-  const [createdOrder, setCreatedOrder] = useState<any>(null);
-  const [copied, setCopied] = useState(false);
 
   // Calculate delivery charge: Rs. 60 base up to 2km, Rs. 30 per km afterwards
   const distanceNum = Number(distance) || 0;
@@ -51,36 +49,6 @@ export default function CartDrawer() {
 
     setIsPlacing(true);
     try {
-      const orderData = {
-        items: cartItems.map(item => ({
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          sizeLabel: item.sizeLabel || ""
-        })),
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        deliveryAddress: orderType === 'delivery' ? deliveryAddress.trim() : 'Self-Pickup from Restaurant',
-        distance: orderType === 'delivery' ? distanceNum : 0,
-        deliveryCharge: orderType === 'delivery' ? deliveryCharge : 0,
-        total: orderType === 'delivery' ? totalWithDelivery : cartTotal,
-        orderType
-      };
-
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderData)
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to register order on server.');
-      }
-
-      const data = await res.json();
-      const serverOrder = data.order;
-      setCreatedOrder(serverOrder);
-
       // Track analytics click
       await fetch('/api/analytics/click', {
         method: 'POST',
@@ -88,13 +56,22 @@ export default function CartDrawer() {
         body: JSON.stringify({ action: 'checkout_whatsapp' })
       }).catch(err => console.error(err));
 
+      // Track analytics order sales and revenue to keep admin dashboards accurate
+      await fetch('/api/analytics/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          totalItems: cartItems.reduce((acc, item) => acc + item.quantity, 0),
+          revenue: orderType === 'delivery' ? totalWithDelivery : cartTotal
+        })
+      }).catch(err => console.error(err));
+
       // Compose WhatsApp message
       let message = `*VEE BITE ORDER DETAILS*\n`;
       message += `------------------------------------\n`;
-      message += `*Order ID:* ${serverOrder.orderId}\n`;
       message += `*Type:* ${orderType === 'delivery' ? '🚗 Delivery' : '🥡 Self-Pickup'}\n`;
-      message += `*Customer:* ${serverOrder.customerName}\n`;
-      message += `*Phone:* ${serverOrder.customerPhone}\n`;
+      message += `*Customer:* ${customerName.trim()}\n`;
+      message += `*Phone:* ${customerPhone.trim()}\n`;
       message += `------------------------------------\n`;
 
       cartItems.forEach((item, index) => {
@@ -108,11 +85,10 @@ export default function CartDrawer() {
       if (orderType === 'delivery') {
         message += `*Delivery Distance:* ${distanceNum} km\n`;
         message += `*Delivery Charges:* Rs. ${deliveryCharge}\n`;
-        message += `*Delivery Address:* ${serverOrder.deliveryAddress}\n`;
+        message += `*Delivery Address:* ${deliveryAddress.trim()}\n`;
       }
       message += `------------------------------------\n`;
       message += `*Total Bill:* *Rs. ${orderType === 'delivery' ? totalWithDelivery : cartTotal}*\n\n`;
-      message += `Track live status here: ${window.location.origin}/#track-${serverOrder.orderId}\n\n`;
       message += `Please confirm my order. Thank you!`;
 
       const encodedMessage = encodeURIComponent(message);
@@ -121,9 +97,10 @@ export default function CartDrawer() {
 
       // Clear the basket
       clearCart();
+      setIsOpen(false);
     } catch (err) {
       console.error(err);
-      alert('Order tracking registration failed, but you can still contact Muhammad Haris on WhatsApp at 0307 655 3100 to place your order directly!');
+      alert('Checkout failed, but you can still contact Muhammad Haris on WhatsApp at 0307 655 3100 to place your order directly!');
     } finally {
       setIsPlacing(false);
     }
@@ -152,123 +129,30 @@ export default function CartDrawer() {
           >
             {/* Header */}
             <div className="p-6 border-b border-gold/10 flex items-center justify-between">
-              {createdOrder ? (
-                <div className="flex items-center gap-2.5">
-                  <div className="relative p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                    <Check className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-display text-lg text-white tracking-wider uppercase font-bold">Order Received!</h3>
-                  </div>
+              <div className="flex items-center gap-2.5">
+                <div className="relative p-2 rounded-xl bg-gold/10 border border-gold/30 text-gold">
+                  <ShoppingBag className="h-5 w-5" />
+                  {cartItems.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red text-white text-[9px] font-bold">
+                      {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="flex items-center gap-2.5">
-                  <div className="relative p-2 rounded-xl bg-gold/10 border border-gold/30 text-gold">
-                    <ShoppingBag className="h-5 w-5" />
-                    {cartItems.length > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red text-white text-[9px] font-bold">
-                        {cartItems.reduce((acc, item) => acc + item.quantity, 0)}
-                      </span>
-                    )}
-                  </div>
-                  <div>
-                    <h3 className="font-display text-xl text-white tracking-wider uppercase">Your Basket</h3>
-                  </div>
+                <div>
+                  <h3 className="font-display text-xl text-white tracking-wider uppercase">Your Basket</h3>
                 </div>
-              )}
+              </div>
 
               <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setCreatedOrder(null);
-                }}
+                onClick={() => setIsOpen(false)}
                 className="p-2 rounded-xl bg-white/5 border border-white/5 text-cream/60 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Cart Items Area or Success Area */}
-            {createdOrder ? (
-              <div className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col justify-center text-center">
-                <motion.div 
-                  className="p-6 rounded-3xl bg-[#1D1B18] border border-emerald-500/20 shadow-2xl relative overflow-hidden"
-                  initial={{ scale: 0.95, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                >
-                  <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
-                    <Check className="w-8 h-8" />
-                  </div>
-                  <h4 className="font-display text-base text-white tracking-wider uppercase font-bold mb-2">Order Confirmed!</h4>
-                  <p className="font-sans text-[11px] text-cream/60 leading-relaxed mb-6">
-                    Your order was successfully registered on our tracking server and you have been redirected to WhatsApp to send the kitchen confirmation details!
-                  </p>
-
-                  <div className="p-4 rounded-2xl bg-black/40 border border-gold/10 space-y-3 text-left">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-cream/50 uppercase tracking-wider font-mono text-[9px]">Trackable Order ID:</span>
-                      <span className="font-mono text-gold font-bold text-xs bg-gold/5 border border-gold/20 px-2.5 py-0.5 rounded uppercase tracking-wider">
-                        {createdOrder.orderId}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-cream/50 uppercase tracking-wider font-mono text-[9px]">Total Amount:</span>
-                      <span className="font-mono text-white font-bold">
-                        Rs. {createdOrder.total}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-cream/50 uppercase tracking-wider font-mono text-[9px]">Order Type:</span>
-                      <span className="font-sans text-gold font-semibold uppercase text-[9px]">
-                        {createdOrder.orderType === 'delivery' ? '🚗 Delivery' : '🥡 Self-Pickup'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-6 space-y-3">
-                    {/* Copy Link button */}
-                    <button
-                      onClick={() => {
-                        const link = `${window.location.origin}/#track-${createdOrder.orderId}`;
-                        navigator.clipboard.writeText(link);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
-                      className="w-full py-2.5 rounded-xl border border-gold/30 hover:bg-gold/5 text-gold text-[9px] uppercase tracking-widest font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copied ? 'Copied Tracking Link' : 'Copy Tracking Link'}</span>
-                    </button>
-
-                    {/* Track Live button */}
-                    <button
-                      onClick={() => {
-                        window.location.hash = `#track-${createdOrder.orderId}`;
-                        setIsOpen(false);
-                        setCreatedOrder(null);
-                      }}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#C5A85C] to-gold hover:opacity-95 text-black text-[9px] uppercase tracking-widest font-bold transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-gold/5 cursor-pointer"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Track Order Live</span>
-                    </button>
-                  </div>
-                </motion.div>
-
-                <button
-                  onClick={() => {
-                    setCreatedOrder(null);
-                    setIsOpen(false);
-                  }}
-                  className="text-[10px] text-cream/40 hover:text-white uppercase tracking-widest transition-colors font-mono"
-                >
-                  Close Panel
-                </button>
-              </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-thumb-gold/20 scrollbar-track-transparent">
+            {/* Cart Items Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 scrollbar-thin scrollbar-thumb-gold/20 scrollbar-track-transparent">
                 {cartItems.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center py-12">
                     <div className="p-4 rounded-full bg-white/5 border border-white/5 text-cream/20 mb-4">
@@ -491,10 +375,9 @@ export default function CartDrawer() {
                   </>
                 )}
               </div>
-            )}
 
             {/* Footer Summary (Sticky at bottom) */}
-            {cartItems.length > 0 && !createdOrder && (
+            {cartItems.length > 0 && (
               <div className="p-6 border-t border-gold/10 bg-[#171512] space-y-4">
                 {/* Subtotals & Grand Total */}
                 <div className="space-y-2">
@@ -537,11 +420,11 @@ export default function CartDrawer() {
                   ) : (
                     <MessageSquare className="h-4 w-4" />
                   )}
-                  <span>{isPlacing ? 'Registering Order...' : 'Send Order via WhatsApp'}</span>
+                  <span>{isPlacing ? 'Redirecting...' : 'Send Order via WhatsApp'}</span>
                 </button>
 
                 <p className="font-sans text-[9px] text-center text-cream/40 leading-relaxed">
-                  Your order will be registered on our tracking server and sent to our kitchen via WhatsApp for instant confirmation.
+                  Your order will be sent to our kitchen via WhatsApp for instant confirmation.
                 </p>
               </div>
             )}
