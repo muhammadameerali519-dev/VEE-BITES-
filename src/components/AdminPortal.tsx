@@ -615,7 +615,8 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
     if (!confirm(`Are you sure you want to permanently delete "${name}"?`)) return;
 
     const headers = { 'Authorization': `Bearer ${token}` };
-    const url = `/api/admin/${type}/${id}`;
+    const mappedType = type === 'deal' ? 'deals' : type;
+    const url = `/api/admin/${mappedType}/${id}`;
 
     try {
       const response = await fetch(url, {
