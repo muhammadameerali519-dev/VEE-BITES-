@@ -422,6 +422,35 @@ app.post("/api/admin/change-password", authMiddleware, (req, res) => {
   res.json({ success: true, message: "Password updated successfully!" });
 });
 
+// Update/Reset Dashboard Analytics
+app.post("/api/admin/analytics/reset", authMiddleware, (req, res) => {
+  const { visitorCount, ordersPlaced, revenue, clicks } = req.body;
+  const db = getDB();
+  
+  db.analytics = {
+    visitorCount: typeof visitorCount === "number" ? visitorCount : 0,
+    ordersPlaced: typeof ordersPlaced === "number" ? ordersPlaced : 0,
+    revenue: typeof revenue === "number" ? revenue : 0,
+    clicks: clicks || {
+      whatsapp: 0,
+      cart_view: 0,
+      menu_add: 0,
+      cart_add: 0,
+      contact_sub: 0
+    }
+  };
+
+  if (!db.activityLogs) db.activityLogs = [];
+  db.activityLogs.unshift({
+    timestamp: new Date().toISOString(),
+    action: "Admin manually updated dashboard analytics",
+    ip: req.ip || "internal"
+  });
+
+  updateDB(db);
+  res.json({ success: true, analytics: db.analytics });
+});
+
 // Get Dashboard Analytics, Logs and Settings
 app.get("/api/admin/analytics", authMiddleware, (req, res) => {
   const db = getDB();

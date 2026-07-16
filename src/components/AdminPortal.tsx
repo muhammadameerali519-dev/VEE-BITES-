@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   ChevronRight,
   Globe,
-  Home
+  Home,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MenuItem, Deal, MENU_CATEGORIES } from '../types';
@@ -916,6 +917,132 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                         </p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Stats Adjustment Control Panel */}
+                  <div className="p-6 rounded-2xl border border-white/10 bg-[#0E0E0E] space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">Quick Stats Adjustments & Resets</h3>
+                        <p className="text-xs text-[#B5A88F]">Modify live visitor sessions, order volumes, revenue metrics, or perform resets.</p>
+                      </div>
+                      <Sparkles className="w-4 h-4 text-gold" />
+                    </div>
+
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.currentTarget);
+                      const visitorCount = Number(formData.get('visitorCount') || 0);
+                      const ordersPlaced = Number(formData.get('ordersPlaced') || 0);
+                      const revenue = Number(formData.get('revenue') || 0);
+                      
+                      try {
+                        const token = localStorage.getItem('veebite_admin_token') || sessionStorage.getItem('veebite_admin_token');
+                        const res = await fetch('/api/admin/analytics/reset', {
+                          method: 'POST',
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': token ? `Bearer ${token}` : ''
+                          },
+                          body: JSON.stringify({ visitorCount, ordersPlaced, revenue })
+                        });
+                        if (res.ok) {
+                          const data = await res.json();
+                          setAnalytics(data.analytics);
+                          // Refresh activity logs
+                          const logsRes = await fetch('/api/admin/analytics', {
+                            headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+                          });
+                          if (logsRes.ok) {
+                            const logsData = await logsRes.json();
+                            setActivityLogs(logsData.activityLogs || []);
+                          }
+                          alert('Analytics updated successfully!');
+                        } else {
+                          alert('Failed to update stats.');
+                        }
+                      } catch (err) {
+                        console.error('Update analytics error:', err);
+                        alert('Connection error while updating analytics.');
+                      }
+                    }} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                      <div>
+                        <label className="block text-[10px] text-[#B5A88F]/80 uppercase tracking-wider mb-1 font-mono">Visits Logged</label>
+                        <input 
+                          type="number" 
+                          name="visitorCount"
+                          defaultValue={analytics.visitorCount || 0}
+                          key={analytics.visitorCount}
+                          className="w-full bg-[#141414] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#B5A88F]/80 uppercase tracking-wider mb-1 font-mono">Orders Placed</label>
+                        <input 
+                          type="number" 
+                          name="ordersPlaced"
+                          defaultValue={analytics.ordersPlaced || 0}
+                          key={analytics.ordersPlaced}
+                          className="w-full bg-[#141414] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-[#B5A88F]/80 uppercase tracking-wider mb-1 font-mono">Total Revenue (Rs.)</label>
+                        <input 
+                          type="number" 
+                          name="revenue"
+                          defaultValue={analytics.revenue || 0}
+                          key={analytics.revenue}
+                          className="w-full bg-[#141414] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-gold"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          type="submit"
+                          className="flex-1 bg-gold hover:bg-gold-light text-black font-sans text-[10px] uppercase tracking-wider py-2.5 rounded-xl font-bold transition-all cursor-pointer"
+                        >
+                          Save Stats
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm('Are you sure you want to reset everything back to zero (Visits to 566)?')) return;
+                            try {
+                              const token = localStorage.getItem('veebite_admin_token') || sessionStorage.getItem('veebite_admin_token');
+                              const res = await fetch('/api/admin/analytics/reset', {
+                                method: 'POST',
+                                headers: { 
+                                  'Content-Type': 'application/json',
+                                  'Authorization': token ? `Bearer ${token}` : ''
+                                },
+                                body: JSON.stringify({ visitorCount: 566, ordersPlaced: 0, revenue: 0 })
+                              });
+                              if (res.ok) {
+                                const data = await res.json();
+                                setAnalytics(data.analytics);
+                                // Refresh activity logs
+                                const logsRes = await fetch('/api/admin/analytics', {
+                                  headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+                                });
+                                if (logsRes.ok) {
+                                  const logsData = await logsRes.json();
+                                  setActivityLogs(logsData.activityLogs || []);
+                                }
+                                alert('Analytics fully reset!');
+                              } else {
+                                alert('Reset failed.');
+                              }
+                            } catch (err) {
+                              console.error(err);
+                              alert('Connection failed during reset.');
+                            }
+                          }}
+                          className="bg-red-950 border border-red-900/30 text-red-300 hover:bg-red-900/50 text-[10px] uppercase tracking-wider px-3 py-2.5 rounded-xl font-bold transition-all cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                    </form>
                   </div>
 
                   {/* Audit Logs Row */}
