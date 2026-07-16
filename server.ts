@@ -283,6 +283,78 @@ app.post("/api/contact", (req, res) => {
   res.json({ success: true, inquiry: newInquiry });
 });
 
+// Create/Place trackable order
+app.post("/api/orders", (req, res) => {
+  const { items, customerName, customerPhone, deliveryAddress, distance, deliveryCharge, total, orderType } = req.body;
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "Order items are required." });
+  }
+
+  const db = getDB();
+  if (!db.orders) db.orders = [];
+
+  // Generate a random but easy-to-read order ID, like VB-1024 or sequential
+  let nextSeq = 1001;
+  if (db.orders.length > 0) {
+    const ids = db.orders.map((o: any) => {
+      const match = String(o.orderId).match(/VB-(\d+)/);
+      return match ? parseInt(match[1], 10) : 1000;
+    });
+    nextSeq = Math.max(...ids) + 1;
+  }
+  const orderId = `VB-${nextSeq}`;
+
+  const newOrder = {
+    id: "ord-" + Date.now(),
+    orderId,
+    customerName: customerName || "Guest Customer",
+    customerPhone: customerPhone || "N/A",
+    deliveryAddress: deliveryAddress || "",
+    distance: Number(distance) || 0,
+    deliveryCharge: Number(deliveryCharge) || 0,
+    total: Number(total) || 0,
+    orderType: orderType || "delivery", // 'delivery' or 'pickup'
+    status: "pending", // pending, confirmed, preparing, ready_for_pickup / out_for_delivery, delivered, cancelled
+    items: items.map((it: any) => ({
+      name: it.name,
+      price: Number(it.price) || 0,
+      quantity: Number(it.quantity) || 1,
+      sizeLabel: it.sizeLabel || ""
+    })),
+    createdAt: new Date().toISOString()
+  };
+
+  db.orders.unshift(newOrder);
+
+  // Update analytics ordersPlaced and revenue
+  if (!db.analytics) db.analytics = { visitorCount: 1240, ordersPlaced: 87, revenue: 94850, clicks: {} };
+  db.analytics.ordersPlaced = (db.analytics.ordersPlaced || 0) + 1;
+  db.analytics.revenue = (db.analytics.revenue || 0) + newOrder.total;
+
+  updateDB(db);
+  res.json({ success: true, order: newOrder });
+});
+
+// Track/Fetch an order by orderId
+app.get("/api/orders/:orderId", (req, res) => {
+  const { orderId } = req.params;
+  if (!orderId) {
+    return res.status(400).json({ error: "Order ID is required." });
+  }
+
+  const db = getDB();
+  if (!db.orders) db.orders = [];
+
+  const cleanId = String(orderId).trim().toUpperCase();
+  const order = db.orders.find((o: any) => o.orderId.toUpperCase() === cleanId || o.id === orderId || String(o.id).toUpperCase() === cleanId);
+
+  if (!order) {
+    return res.status(404).json({ error: "Order not found. Please verify the Order ID (e.g., VB-1001)." });
+  }
+
+  res.json(order);
+});
+
 // Record visitor session
 app.post("/api/analytics/visit", (req, res) => {
   const db = getDB();
@@ -488,6 +560,62 @@ app.delete("/api/admin/inquiries/:id", authMiddleware, (req, res) => {
   const db = getDB();
   if (!db.inquiries) db.inquiries = [];
   db.inquiries = db.inquiries.filter((x: any) => x.id !== id);
+  updateDB(db);
+  res.json({ success: true });
+});
+
+// Get all orders for Admin Portal
+app.get("/api/admin/orders", authMiddleware, (req, res) => {
+  const db = getDB();
+  res.json(db.orders || []);
+});
+
+// Update order status
+app.put("/api/admin/orders/:id", authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  const db = getDB();
+  if (!db.orders) db.orders = [];
+
+  const order = db.orders.find((x: any) => x.id === id || x.orderId === id);
+  if (order) {
+    const oldStatus = order.status;
+    order.status = status || "pending";
+    
+    // Add activity log
+    if (!db.activityLogs) db.activityLogs = [];
+    db.activityLogs.unshift({
+      timestamp: new Date().toISOString(),
+      action: `Updated order ${order.orderId} status from '${oldStatus}' to '${status}'`,
+      ip: req.ip || "admin"
+    });
+
+    updateDB(db);
+    return res.json({ success: true, order });
+  }
+  res.status(404).json({ error: "Order not found" });
+});
+
+// Delete/Archive order
+app.delete("/api/admin/orders/:id", authMiddleware, (req, res) => {
+  const { id } = req.params;
+  const db = getDB();
+  if (!db.orders) db.orders = [];
+
+  const order = db.orders.find((x: any) => x.id === id || x.orderId === id);
+  const orderIdStr = order ? order.orderId : id;
+
+  db.orders = db.orders.filter((x: any) => x.id !== id && x.orderId !== id);
+
+  if (order) {
+    if (!db.activityLogs) db.activityLogs = [];
+    db.activityLogs.unshift({
+      timestamp: new Date().toISOString(),
+      action: `Deleted order ${orderIdStr}`,
+      ip: req.ip || "admin"
+    });
+  }
+
   updateDB(db);
   res.json({ success: true });
 });

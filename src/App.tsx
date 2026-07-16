@@ -12,15 +12,27 @@ import { CartProvider } from './context/CartContext';
 import CartDrawer from './components/CartDrawer';
 import { motion } from 'motion/react';
 import AdminPortal from './components/AdminPortal';
+import TrackOrderModal from './components/TrackOrderModal';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showTrack, setShowTrack] = useState(false);
+  const [trackOrderId, setTrackOrderId] = useState('');
 
   useEffect(() => {
-    // Detect Hash routing for admin portal
+    // Detect Hash routing for admin portal and order tracking
     const handleHashCheck = () => {
-      setShowAdmin(window.location.hash === '#admin');
+      const hash = window.location.hash;
+      setShowAdmin(hash === '#admin');
+      
+      if (hash === '#track') {
+        setShowTrack(true);
+        setTrackOrderId('');
+      } else if (hash.startsWith('#track-')) {
+        setShowTrack(true);
+        setTrackOrderId(hash.replace('#track-', ''));
+      }
     };
     handleHashCheck();
     window.addEventListener('hashchange', handleHashCheck);
@@ -86,6 +98,7 @@ export default function App() {
               {/* Floating UI Elements */}
               <WhatsAppButton />
               <CartDrawer />
+              <TrackOrderModal isOpen={showTrack} onClose={() => { setShowTrack(false); if (window.location.hash.startsWith('#track')) { window.location.hash = ''; } }} initialOrderId={trackOrderId} />
             </>
           )}
         </motion.div>

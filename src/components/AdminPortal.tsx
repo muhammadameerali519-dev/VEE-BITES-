@@ -113,7 +113,7 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Portal Navigation State
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'deals' | 'blog' | 'inquiries' | 'pages' | 'media' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'deals' | 'blog' | 'inquiries' | 'pages' | 'media' | 'orders' | 'settings'>('dashboard');
 
   // Backend Data States
   const [analytics, setAnalytics] = useState<{ visitorCount: number; ordersPlaced: number; revenue: number; clicks: Record<string, number> }>({
@@ -129,6 +129,9 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
   const [pages, setPages] = useState<PageData[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [ordersSearch, setOrdersSearch] = useState('');
+  const [ordersFilter, setOrdersFilter] = useState('all');
 
   // Editing / Creating Modals State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -278,6 +281,13 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
       if (mediaRes.ok) {
         const data = await mediaRes.json();
         setMediaItems(data);
+      }
+
+      // Orders
+      const ordersRes = await fetch('/api/admin/orders', { headers });
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
+        setOrders(data);
       }
 
     } catch (error) {
@@ -642,6 +652,69 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
     return matchesSearch && matchesFilter;
   });
 
+  // Order helper functions
+  const updateOrderStatus = async (id: string, status: string) => {
+    const headers = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}` 
+    };
+    try {
+      const response = await fetch(`/api/admin/orders/${id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ status })
+      });
+      if (response.ok) {
+        const ordersRes = await fetch('/api/admin/orders', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (ordersRes.ok) {
+          const data = await ordersRes.json();
+          setOrders(data);
+        }
+        fetchDashboardData();
+      } else {
+        alert('Failed to update order status.');
+      }
+    } catch (err) {
+      console.error('Update order status error:', err);
+    }
+  };
+
+  const deleteOrder = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete/archive this order?')) return;
+    const headers = { 'Authorization': `Bearer ${token}` };
+    try {
+      const response = await fetch(`/api/admin/orders/${id}`, {
+        method: 'DELETE',
+        headers
+      });
+      if (response.ok) {
+        setOrders(prev => prev.filter(order => order.id !== id));
+        fetchDashboardData();
+      } else {
+        alert('Failed to delete order.');
+      }
+    } catch (err) {
+      console.error('Delete order error:', err);
+    }
+  };
+
+  const filteredOrders = orders.filter((ord) => {
+    const matchesSearch = 
+      ord.orderId.toLowerCase().includes(ordersSearch.toLowerCase()) ||
+      ord.customerName.toLowerCase().includes(ordersSearch.toLowerCase()) ||
+      ord.customerPhone.toLowerCase().includes(ordersSearch.toLowerCase());
+    
+    if (ordersFilter === 'all') return matchesSearch;
+    if (ordersFilter === 'pending') return matchesSearch && ord.status === 'pending';
+    if (ordersFilter === 'confirmed') return matchesSearch && ord.status === 'confirmed';
+    if (ordersFilter === 'preparing') return matchesSearch && ord.status === 'preparing';
+    if (ordersFilter === 'ready') return matchesSearch && (ord.status === 'ready_for_pickup' || ord.status === 'out_for_delivery');
+    if (ordersFilter === 'delivered') return matchesSearch && ord.status === 'delivered';
+    if (ordersFilter === 'cancelled') return matchesSearch && ord.status === 'cancelled';
+    
+    return matchesSearch;
+  });
+
   // Calculate dynamic sales summary metrics
   const clickCount: number = Object.values(analytics.clicks || {}).reduce((a: number, b: any) => a + Number(b || 0), 0) as number;
 
@@ -748,6 +821,7 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                   { id: 'menu', label: 'Menu List', icon: Utensils },
                   { id: 'deals', label: 'Special Deals', icon: Percent },
                   { id: 'blog', label: 'News/Blog', icon: FileText },
+                  { id: 'orders', label: `Orders (${orders.filter(o=>o.status==='pending').length})`, icon: ShoppingBag },
                   { id: 'inquiries', label: `Inquiries (${inquiries.filter(i=>i.status==='pending').length})`, icon: Mail },
                   { id: 'pages', label: 'Page Content', icon: Globe },
                   { id: 'media', label: 'Media Library', icon: ImageIcon },
@@ -1635,6 +1709,175 @@ export default function AdminPortal({ onClose }: { onClose: () => void }) {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 9: ORDER MANAGEMENT & TIMELINE STATUS UPDATER */}
+              {activeTab === 'orders' && (
+                <div className="space-y-4">
+                  <div className="bg-[#0E0E0E] p-4 rounded-xl border border-white/10 flex flex-col md:flex-row justify-between gap-3 items-stretch md:items-center">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Live Kitchen Order Management</h3>
+                      <p className="text-xs text-[#B5A88F]">Monitor incoming customer orders, change timeline progress status, and log deliveries.</p>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {/* Search Input */}
+                      <div className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1">
+                        <Search className="w-3.5 h-3.5 text-[#B5A88F]" />
+                        <input
+                          type="text"
+                          placeholder="Search orders..."
+                          value={ordersSearch}
+                          onChange={(e) => setOrdersSearch(e.target.value)}
+                          className="bg-transparent border-0 outline-none text-xs text-[#F3E9D2] placeholder-[#B5A88F]/40 w-32"
+                        />
+                      </div>
+
+                      {/* Filter Select */}
+                      <select
+                        value={ordersFilter}
+                        onChange={(e) => setOrdersFilter(e.target.value)}
+                        className="bg-white/[0.04] border border-white/10 rounded-lg text-xs py-1 px-2 focus:outline-none focus:border-gold cursor-pointer"
+                      >
+                        <option value="all">All Orders</option>
+                        <option value="pending">Awaiting Confirmation</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="preparing">Preparing</option>
+                        <option value="ready">Ready / Out for Delivery</option>
+                        <option value="delivered">Completed / Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Orders List Container */}
+                  <div className="space-y-3">
+                    {filteredOrders.length === 0 ? (
+                      <div className="p-12 text-center rounded-xl bg-white/[0.01] border border-white/5">
+                        <ShoppingBag className="w-12 h-12 text-[#B5A88F]/20 mx-auto mb-3" />
+                        <h4 className="text-sm text-white/80 font-bold">No Orders Found</h4>
+                        <p className="text-xs text-[#B5A88F]/40 mt-1">Incoming orders from the storefront will appear here in real-time.</p>
+                      </div>
+                    ) : (
+                      filteredOrders.map((ord) => {
+                        const isPending = ord.status === 'pending';
+                        const isCancelled = ord.status === 'cancelled';
+                        const isDelivered = ord.status === 'delivered';
+
+                        return (
+                          <div key={ord.id} className="p-5 rounded-2xl bg-[#0D0D0D] border border-white/5 hover:border-gold/20 transition-all space-y-4">
+                            {/* Header Info */}
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-white/5">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs font-bold text-gold uppercase bg-gold/5 border border-gold/20 px-2 py-0.5 rounded">
+                                    {ord.orderId}
+                                  </span>
+                                  <span className={`text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded ${
+                                    isCancelled 
+                                      ? 'bg-red-950/40 text-red-400 border border-red-900/30' 
+                                      : isDelivered 
+                                        ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-900/30' 
+                                        : 'bg-gold/10 text-gold border border-gold/20'
+                                  }`}>
+                                    {ord.status}
+                                  </span>
+                                  <span className="text-[10px] text-cream/40 uppercase font-bold font-mono">
+                                    {ord.orderType === 'delivery' ? '🚗 Delivery' : '🥡 Self-Pickup'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-[#B5A88F]/60 font-mono mt-1">
+                                  Placed {new Date(ord.createdAt).toLocaleString()}
+                                </p>
+                              </div>
+
+                              <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <span className="text-xs text-[#B5A88F]/60">Change Status:</span>
+                                <select
+                                  value={ord.status}
+                                  onChange={(e) => updateOrderStatus(ord.id, e.target.value)}
+                                  className="bg-white/[0.04] border border-white/10 rounded-lg text-xs py-1 px-2 focus:outline-none focus:border-gold cursor-pointer"
+                                >
+                                  <option value="pending">Pending</option>
+                                  <option value="confirmed">Confirmed</option>
+                                  <option value="preparing">Preparing</option>
+                                  {ord.orderType === 'pickup' ? (
+                                    <option value="ready_for_pickup">Ready for Pickup</option>
+                                  ) : (
+                                    <option value="out_for_delivery">Out for Delivery</option>
+                                  )}
+                                  <option value="delivered">Delivered</option>
+                                  <option value="cancelled">Cancelled</option>
+                                </select>
+
+                                <button
+                                  onClick={() => deleteOrder(ord.id)}
+                                  className="cursor-pointer p-1.5 rounded bg-red-950/20 hover:bg-red-900 text-red-400 hover:text-white transition-colors ml-auto sm:ml-0"
+                                  title="Delete order"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Details Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {/* Customer info */}
+                              <div className="space-y-1">
+                                <h5 className="text-[10px] uppercase tracking-widest text-[#B5A88F]/50 font-bold font-mono">Customer Profile</h5>
+                                <p className="text-xs font-bold text-white">{ord.customerName}</p>
+                                <p className="text-xs font-semibold font-mono text-gold">{ord.customerPhone}</p>
+                              </div>
+
+                              {/* Destination Info */}
+                              <div className="space-y-1">
+                                <h5 className="text-[10px] uppercase tracking-widest text-[#B5A88F]/50 font-bold font-mono">Destination / Distance</h5>
+                                <p className="text-xs text-white leading-relaxed truncate max-w-xs" title={ord.deliveryAddress}>
+                                  {ord.deliveryAddress}
+                                </p>
+                                {ord.orderType === 'delivery' && (
+                                  <p className="text-[10px] text-cream/40 font-mono">Distance: {ord.distance} km | Fare: Rs. {ord.deliveryCharge}</p>
+                                )}
+                              </div>
+
+                              {/* Bill amount */}
+                              <div className="space-y-1 md:text-right">
+                                <h5 className="text-[10px] uppercase tracking-widest text-[#B5A88F]/50 font-bold font-mono">Total Paid/Payable</h5>
+                                <p className="text-sm font-black text-white font-mono">Rs. {ord.total}</p>
+                                <p className="text-[9px] text-[#B5A88F]/40 uppercase tracking-widest font-bold">Via Cash on Delivery</p>
+                              </div>
+                            </div>
+
+                            {/* Ordered Items Accordion-like list */}
+                            <div className="p-3.5 bg-black/30 rounded-xl border border-white/5 space-y-1.5">
+                              <h5 className="text-[9px] uppercase tracking-widest text-gold/60 font-bold font-mono">Items ordered</h5>
+                              <div className="space-y-1 divide-y divide-white/5">
+                                {ord.items.map((it: any, j: number) => (
+                                  <div key={j} className="flex justify-between items-center text-xs py-1.5 first:pt-0 last:pb-0">
+                                    <div className="min-w-0">
+                                      <span className="text-white font-medium uppercase truncate block max-w-xs">
+                                        {it.name}
+                                      </span>
+                                      {it.sizeLabel && (
+                                        <span className="inline-block bg-gold/10 text-gold text-[8px] font-bold uppercase px-1 rounded">
+                                          {it.sizeLabel}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="font-mono text-[#B5A88F]/80">
+                                      {it.quantity} x Rs. {it.price} = Rs. {it.quantity * it.price}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               )}
