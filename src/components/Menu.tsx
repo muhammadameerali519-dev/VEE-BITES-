@@ -7,7 +7,43 @@ export default function Menu() {
   const { addToCart } = useCart();
   const [selectedSizes, setSelectedSizes] = useState<{ [itemId: string]: string }>({});
   const [activeCategory, setActiveCategory] = useState('regular-pizza');
+  const [items, setItems] = useState<MenuItem[]>(MENU_ITEMS);
   const observer = useRef<IntersectionObserver | null>(null);
+
+  // Fetch dynamic menu from API on mount
+  useEffect(() => {
+    const fetchMenuData = async () => {
+      try {
+        const response = await fetch('/api/menu');
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            setItems(data);
+          }
+        }
+      } catch (err) {
+        console.error('Menu dynamic API load failed, using local seed fallback:', err);
+      }
+    };
+    fetchMenuData();
+  }, []);
+
+  // Track add to cart actions
+  const handleAddToCart = async (item: MenuItem, type: string, price: number, sizeLabel: string) => {
+    // Add to cart state
+    addToCart(item, type, price, sizeLabel);
+    
+    // Log conversion metric in database
+    try {
+      await fetch('/api/analytics/click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cart_add' })
+      });
+    } catch (e) {
+      console.error('Failed to log cart click conversion:', e);
+    }
+  };
 
   // Initialize selected sizes for multiple-priced items
   const getSelectedPriceAndSize = (item: MenuItem) => {
@@ -115,7 +151,7 @@ export default function Menu() {
         {/* Stacked Menu Grid spanning full width */}
         <div className="w-full space-y-16">
           {MENU_CATEGORIES.map((category) => {
-            const categoryItems = MENU_ITEMS.filter((item) => item.category === category.id);
+            const categoryItems = items.filter((item) => item.category === category.id);
             
             if (categoryItems.length === 0) return null;
 
@@ -230,7 +266,7 @@ export default function Menu() {
                             </div>
 
                             <button
-                              onClick={() => addToCart(item, 'menu', price, sizeLabel)}
+                              onClick={() => handleAddToCart(item, 'menu', price, sizeLabel)}
                               className="flex items-center gap-2 rounded-xl bg-white hover:bg-neutral-200 text-black font-sans text-[10px] uppercase tracking-widest px-4 py-2.5 transition-all duration-300 font-bold shadow-md cursor-pointer hover:scale-[1.02]"
                             >
                               <ShoppingCart className="h-3 w-3" />

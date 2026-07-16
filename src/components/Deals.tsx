@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { DEALS } from '../types';
 import { Tag, Sparkles, ShoppingBag } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -5,6 +6,40 @@ import { useCart } from '../context/CartContext';
 
 export default function Deals() {
   const { addToCart } = useCart();
+  const [deals, setDeals] = useState(DEALS);
+
+  useEffect(() => {
+    const fetchDealsData = async () => {
+      try {
+        const response = await fetch('/api/deals');
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.length > 0) {
+            setDeals(data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch dynamic deals:', err);
+      }
+    };
+    fetchDealsData();
+  }, []);
+
+  const handleAddToCart = async (deal: any, type: string, price: number) => {
+    // Add to cart context
+    addToCart(deal, type, price);
+    
+    // Record conversion metric
+    try {
+      await fetch('/api/analytics/click', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cart_add' })
+      });
+    } catch (e) {
+      console.error('Failed to record click conversion:', e);
+    }
+  };
 
   const getTagStyles = (tag: string) => {
     switch (tag) {
@@ -38,7 +73,7 @@ export default function Deals() {
 
         {/* Deals Ticket Grid: Responsive Bento Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {DEALS.map((deal, idx) => (
+          {deals.map((deal, idx) => (
             <motion.div
               key={deal.id}
               initial={{ opacity: 0, y: 15 }}
@@ -110,7 +145,7 @@ export default function Deals() {
                   </div>
 
                   <button
-                    onClick={() => addToCart(deal, 'deal', typeof deal.price === 'number' ? deal.price : parseInt(String(deal.price).replace(/\D/g, ''), 10))}
+                    onClick={() => handleAddToCart(deal, 'deal', typeof deal.price === 'number' ? deal.price : parseInt(String(deal.price).replace(/\D/g, ''), 10))}
                     className="flex items-center gap-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-sans text-[10px] uppercase tracking-widest px-4.5 py-2.5 transition-all duration-300 font-bold shadow-md cursor-pointer hover:scale-[1.02]"
                   >
                     <span>Add to Basket</span>

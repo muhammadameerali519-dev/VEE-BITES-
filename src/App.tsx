@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Loader from './components/Loader';
 import Header from './components/Header';
 import Hero from './components/Hero';
@@ -11,9 +11,37 @@ import WhatsAppButton from './components/WhatsAppButton';
 import { CartProvider } from './context/CartContext';
 import CartDrawer from './components/CartDrawer';
 import { motion } from 'motion/react';
+import AdminPortal from './components/AdminPortal';
 
 export default function App() {
   const [loading, setLoading] = useState(true);
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  useEffect(() => {
+    // Detect Hash routing for admin portal
+    const handleHashCheck = () => {
+      setShowAdmin(window.location.hash === '#admin');
+    };
+    handleHashCheck();
+    window.addEventListener('hashchange', handleHashCheck);
+
+    // Track visitor sessions
+    const trackVisitorSession = async () => {
+      try {
+        if (!sessionStorage.getItem('veebite_visited')) {
+          await fetch('/api/analytics/visit', { method: 'POST' });
+          sessionStorage.setItem('veebite_visited', 'true');
+        }
+      } catch (err) {
+        console.error('Visitor logging failed:', err);
+      }
+    };
+    trackVisitorSession();
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashCheck);
+    };
+  }, []);
 
   return (
     <CartProvider>
@@ -27,30 +55,39 @@ export default function App() {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6 }}
         >
-          {/* Sticky Header Nav */}
-          <Header />
+          {showAdmin ? (
+            <AdminPortal onClose={() => {
+              window.location.hash = '';
+              setShowAdmin(false);
+            }} />
+          ) : (
+            <>
+              {/* Sticky Header Nav */}
+              <Header />
 
-          {/* Hero segment */}
-          <Hero />
+              {/* Hero segment */}
+              <Hero />
 
-          {/* Menu segment */}
-          <Menu />
+              {/* Menu segment */}
+              <Menu />
 
-          {/* Deals segment */}
-          <Deals />
+              {/* Deals segment */}
+              <Deals />
 
-          {/* Contact segment */}
-          <Contact />
+              {/* Contact segment */}
+              <Contact />
 
-          {/* Our Story section */}
-          <OurStory />
+              {/* Our Story section */}
+              <OurStory />
 
-          {/* Footer segment */}
-          <Footer />
+              {/* Footer segment */}
+              <Footer />
 
-          {/* Floating UI Elements */}
-          <WhatsAppButton />
-          <CartDrawer />
+              {/* Floating UI Elements */}
+              <WhatsAppButton />
+              <CartDrawer />
+            </>
+          )}
         </motion.div>
       )}
     </CartProvider>

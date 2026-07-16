@@ -106,7 +106,7 @@ export default function Footer() {
         <div className="border-t border-white/5 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="text-center md:text-left">
             <p className="font-sans text-[11px] text-cream/45 tracking-widest uppercase">
-              VEE BITE © {new Date().getFullYear()} All Rights Reserved.
+              VEE BITE © {new Date().getFullYear()} All Rights Reserved. | <a href="#admin" className="text-gold/60 hover:text-gold transition-colors ml-1.5 font-medium underline-offset-4 hover:underline">Staff Administration</a>
             </p>
             <p className="font-sans text-[11px] text-gold-dark uppercase tracking-[0.2em] font-semibold mt-1">
               Website Created By Fast Target Co. — 0314 8418849
